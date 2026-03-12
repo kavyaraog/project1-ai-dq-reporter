@@ -1,0 +1,64 @@
+AI-GENERATED DATA QUALITY REPORT
+========================================
+
+# Data Quality Report — Fintech Transaction Dataset
+
+**Report Date:** Current Pipeline Run
+**Dataset Scope:** Transaction records processed through automated DQ pipeline
+
+---
+
+## 1. Executive Summary
+
+The dataset is in **poor overall health**, with only **60% of records fully complete** — well below the 95% threshold typically required for reliable financial reporting and reconciliation. Four out of ten records contain at least one null field spanning critical attributes (`amount`, `status`, `merchant`). Additionally, one high-value transaction ($22,000 at Walmart) has been flagged for anomaly review. No duplicates or invalid (negative/zero) amounts were detected, which indicates that upstream ingestion logic for those checks is functioning correctly.
+
+---
+
+## 2. Issues Found
+
+### Issue 2.1 — Missing `amount` Values (2 records)
+
+| Detail | Value |
+|---|---|
+| **Severity** | 🔴 **HIGH** |
+| **What it means** | Two transactions have no dollar amount recorded. These records cannot be used for settlement, revenue calculation, ledger posting, or regulatory reporting (e.g., BSA/AML thresholds). They are effectively "phantom" transactions that distort aggregate totals and could cause reconciliation breaks. |
+| **Likely cause** | Partial message ingestion from the payment processor or acquirer — the authorization response may have timed out before the amount field was populated. Alternatively, a schema mismatch during an API version migration could be silently dropping the field. |
+
+---
+
+### Issue 2.2 — Missing `status` Value (1 record)
+
+| Detail | Value |
+|---|---|
+| **Severity** | 🔴 **HIGH** |
+| **What it means** | One transaction has no status (e.g., `approved`, `declined`, `pending`). Without status, the transaction cannot be correctly routed through settlement workflows, and it becomes invisible to fraud-monitoring rules that filter by status. It also poses a compliance risk — dispute and chargeback windows depend on knowing the transaction state. |
+| **Likely cause** | A race condition or dropped callback from the payment gateway. The transaction was likely created in the system before the issuer response was received, and the status update event was never persisted — possibly due to a message queue failure (e.g., Kafka consumer lag or dead-letter scenario). |
+
+---
+
+### Issue 2.3 — Missing `merchant` Value (1 record)
+
+| Detail | Value |
+|---|---|
+| **Severity** | 🟡 **MEDIUM** |
+| **What it means** | One transaction is missing its merchant identifier/name. This impacts merchant-level reporting, interchange fee categorization, and MCC-based fraud rules. While the transaction may still settle, it cannot be properly attributed in merchant analytics or customer-facing statements. |
+| **Likely cause** | Incomplete merchant master data enrichment. The merchant ID from the raw transaction may not have matched any entry in the merchant lookup table (MID mapping), causing a null join. Alternatively, the originating POS or gateway omitted the merchant descriptor. |
+
+---
+
+### Issue 2.4 — Overall Completeness at 60%
+
+| Detail | Value |
+|---|---|
+| **Severity** | 🔴 **HIGH** |
+| **What it means** | Only 6 out of 10 records are fully populated across all fields. A 60% completeness rate means the dataset **cannot be trusted** for downstream analytics, financial reporting, or regulatory filings. Any aggregation (daily volume, approval rates, merchant performance) built on this data will be materially inaccurate. |
+| **Likely cause** | This is the cumulative effect of Issues 2.1–2.3. However, a 40% incompleteness rate in a single pipeline run suggests a **systemic issue** — not isolated incidents. Potential root causes include: a degraded upstream source system, a failed enrichment job, or a schema change that was deployed without backward compatibility. |
+
+---
+
+### Issue 2.5 — High-Value Transaction Flagged ($22,000 at Walmart)
+
+| Detail | Value |
+|---|---|
+| **Severity** | 🟡 **MEDIUM** |
+| **What it means** | A single transaction of **$22,000** at **Walmart** exceeds typical consumer spending thresholds and was flagged by the anomaly detection rule. While not necessarily fraudulent, it is atypical for a general retail merchant and could indicate a keying error

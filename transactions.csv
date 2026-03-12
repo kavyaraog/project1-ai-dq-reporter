@@ -1,0 +1,11 @@
+transaction_id,amount,status,merchant,date
+1,250.00,success,Walmart,2024-01-01
+2,15200.00,failed,Amazon,2024-01-02
+3,,success,Target,2024-01-02
+4,9800.00,success,Walmart,2024-01-03
+5,11000.00,failed,BestBuy,2024-01-03
+6,430.00,success,Amazon,2024-01-04
+7,,failed,Target,2024-01-04
+8,5600.00,success,,2024-01-05
+9,22000.00,success,Walmart,2024-01-05
+10,310.00,,BestBuy,2024-01-06

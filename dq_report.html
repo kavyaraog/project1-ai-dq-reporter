@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>DQ Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        h1, h2, h3 { color: #2c3e50; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+<h1>Data Quality Report — Fintech Transaction Dataset</h1>
+<p><strong>Report Type:</strong> Automated Pipeline Check · Post-Ingestion Review
+<strong>Reviewed by:</strong> Senior Data Quality Engineer</p>
+<hr />
+<h2>1. Executive Summary</h2>
+<p>The dataset is in <strong>poor overall health</strong>, with only <strong>60% of records fully complete</strong> — well below the 95% completeness threshold expected for production-grade transaction data. Four out of ten records contain null values in critical fields (<code>amount</code>, <code>status</code>, <code>merchant</code>), which directly impacts downstream reconciliation, reporting, and fraud-detection workflows. No duplicates or invalid (negative/zero) amounts were detected, and one high-value transaction has been flagged for review.</p>
+<hr />
+<h2>2. Issues Found</h2>
+<h3>Issue A — Missing <code>amount</code> Values (2 records)</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Severity</strong></td>
+<td>🔴 <strong>HIGH</strong></td>
+</tr>
+<tr>
+<td><strong>What it means</strong></td>
+<td>Two transactions have no dollar amount recorded. These records cannot be reconciled, settled, or included in revenue reporting. They are effectively "ghost" transactions that will cause discrepancies between the ledger and the payment processor.</td>
+</tr>
+<tr>
+<td><strong>Likely cause</strong></td>
+<td>Partial writes from the payment gateway — the authorization call may have succeeded but the response payload was dropped before the amount was persisted (e.g., a timeout, network interruption, or schema mismatch during ingestion). Alternatively, an upstream source system may be emitting incomplete event payloads.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3>Issue B — Missing <code>status</code> Value (1 record)</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Severity</strong></td>
+<td>🔴 <strong>HIGH</strong></td>
+</tr>
+<tr>
+<td><strong>What it means</strong></td>
+<td>One transaction has no settlement status (e.g., <code>pending</code>, <code>completed</code>, <code>declined</code>). Without status, the transaction cannot be routed through the correct post-processing workflow — it will be invisible to the settlement engine and may result in funds being held or double-charged.</td>
+</tr>
+<tr>
+<td><strong>Likely cause</strong></td>
+<td>Race condition or event-ordering issue in the ingestion pipeline — the status update event may have arrived before the base transaction was created, or the status field was conditionally omitted by the source API due to an unhandled edge case (e.g., a processor-specific response code that doesn't map to the internal enum).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3>Issue C — Missing <code>merchant</code> Value (1 record)</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Severity</strong></td>
+<td>🟡 <strong>MEDIUM</strong></td>
+</tr>
+<tr>
+<td><strong>What it means</strong></td>
+<td>One transaction cannot be attributed to a merchant. This affects merchant-level analytics, interchange fee calculations, and category-based spend reporting. If this record belongs to a regulated merchant category (e.g., gambling, crypto), it also creates a compliance blind spot.</td>
+</tr>
+<tr>
+<td><strong>Likely cause</strong></td>
+<td>The merchant descriptor may have been null or malformed in the acquirer's response, or the MID (Merchant ID) lookup in the enrichment layer failed silently without logging an error or applying a fallback value.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3>Issue D — High-Value Transaction Flagged ($22,000 at Walmart)</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Severity</strong></td>
+<td>🟡 <strong>MEDIUM</strong></td>
+</tr>
+<tr>
+<td><strong>What it means</strong></td>
+<td>A single transaction of <strong>$22,000</strong> at <strong>Walmart</strong> has been flagged as a statistical outlier. While not inherently invalid, this amount is atypical for a retail merchant and could indicate a data entry error (e.g., decimal-point shift: $220.00 → $22,000.00), a bulk/corporate purchase, or potential fraud. If legitimate, it may also trigger <strong>BSA/AML reporting thresholds</strong> (transactions at or above $10,000).</td>
+</tr>
+<tr>
+<td><strong>Likely cause</strong></td>
+<td>Requires manual investigation. Most probable causes: (1) a decimal/currency-conversion error at the point of sale or gateway level, (2) a legitimate high-ticket purchase (e.g., electronics in bulk), or (3) a structuring/fraud attempt.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3>Issue E — Overall Completeness Below Threshold (60%)</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Severity</strong></td>
+<td>🔴 <strong>HIGH</strong></td>
+</tr>
+<tr>
+<td><strong>What it means</strong></td>
+<td>4 out of 10 records are incomplete. At 60% completeness, this dataset <strong>fails production-readiness standards</strong> and should not be consumed by downstream systems (dashboards, settlement, risk scoring) without remediation. Aggregate KPIs (TPV, approval rates, merchant</td>
+</tr>
+</tbody>
+</table>
+</body></html>
